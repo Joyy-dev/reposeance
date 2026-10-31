@@ -165,9 +165,80 @@ class OllamaService {
     }
   }
 
+  /// Dispatches a structured non-streaming chat request to Ollama `/api/chat`.
+  /// Security & correctness invariants:
+  /// - Enforces loopback destination to prevent data egress.
+  /// - Disables redirect following (`followRedirects = false`).
+  /// - Sends `"think": false` so internal reasoning tokens do not consume output token budget.
+  /// - Default temperature 0.1 for deterministic, factual extraction.
+  Future<Map<String, dynamic>> chat({
+    required List<Map<String, String>> messages,
+    Map<String, dynamic>? format,
+    String? model,
+    Map<String, dynamic>? options,
+    Duration timeout = const Duration(seconds: 180),
+    http.Client? clientOverride,
+  }) async {
+    _assertLoopback(baseUri);
+
+    final selectedModel = model ?? targetModel;
+    final client = clientOverride ?? _client;
+    final chatUri = Uri.parse('$baseUri/api/chat');
+
+    final payload = <String, dynamic>{
+      'model': selectedModel,
+      'messages': messages,
+      'stream': false,
+      'think': false,
+      'options': {'temperature': 0.1, 'num_predict': 768, ...?options},
+    };
+    if (format != null) {
+      payload['format'] = format;
+    }
+
+    final request = http.Request('POST', chatUri)
+      ..followRedirects = false
+      ..headers[HttpHeaders.contentTypeHeader] =
+          'application/json; charset=utf-8'
+      ..body = jsonEncode(payload);
+
+    try {
+      final streamedResponse = await client.send(request).timeout(timeout);
+      final response = await http.Response.fromStream(streamedResponse);
+
+      if (response.statusCode != 200) {
+        throw OllamaServiceException(
+          'Ollama chat failed with HTTP ${response.statusCode}: ${response.body}',
+          statusCode: response.statusCode,
+        );
+      }
+
+      final dynamic decoded = jsonDecode(utf8.decode(response.bodyBytes));
+      if (decoded is! Map<String, dynamic>) {
+        throw OllamaServiceException(
+          'Unexpected non-object response payload from Ollama /api/chat: $decoded',
+        );
+      }
+
+      return decoded;
+    } on SocketException catch (e) {
+      throw OllamaServiceException('Ollama service offline (${e.message})');
+    }
+  }
+
   void dispose() {
     _client.close();
   }
+}
+
+class OllamaServiceException implements Exception {
+  final String message;
+  final int? statusCode;
+
+  const OllamaServiceException(this.message, {this.statusCode});
+
+  @override
+  String toString() => message;
 }
 
 class SecurityException implements Exception {
