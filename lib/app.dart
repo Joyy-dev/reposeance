@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'core/theme/app_theme.dart';
-import 'features/readiness/presentation/screens/readiness_screen.dart';
+import 'features/workbench/presentation/screens/workbench_screen.dart';
 
 /// Root application widget for RepoSéance workbench.
 class RepoSeanceApp extends StatelessWidget {
@@ -13,7 +13,7 @@ class RepoSeanceApp extends StatelessWidget {
       title: 'RepoSéance — Repository Autopsy Workbench',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.darkTheme,
-      home: const ReadinessScreen(),
+      home: const WorkbenchScreen(),
     );
   }
 }

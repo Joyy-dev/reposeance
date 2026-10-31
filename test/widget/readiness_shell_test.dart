@@ -5,11 +5,12 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:provider/provider.dart';
-import 'package:reposeance/app.dart';
 import 'package:reposeance/core/services/ollama_service.dart';
+import 'package:reposeance/core/theme/app_theme.dart';
 import 'package:reposeance/core/utils/git_checker.dart';
 import 'package:reposeance/features/readiness/controllers/readiness_controller.dart';
 import 'package:reposeance/features/readiness/models/readiness_state.dart';
+import 'package:reposeance/features/readiness/presentation/screens/readiness_screen.dart';
 
 void main() {
   testWidgets(
@@ -65,7 +66,10 @@ void main() {
       await tester.pumpWidget(
         ChangeNotifierProvider<ReadinessController>.value(
           value: controller,
-          child: const RepoSeanceApp(),
+          child: MaterialApp(
+            theme: AppTheme.darkTheme,
+            home: const ReadinessScreen(),
+          ),
         ),
       );
 
