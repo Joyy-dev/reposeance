@@ -53,6 +53,7 @@ void main() {
           status: OllamaHealthStatus.ready,
         ),
         selectedDirectory: r'C:\Users\tester\projects\demo_repo',
+        isTargetGitRepo: true,
       );
       expect(state.canProceedToScan, isTrue);
       expect(state.hasDirectorySelected, isTrue);

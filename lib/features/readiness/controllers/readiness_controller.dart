@@ -3,20 +3,24 @@ import 'package:flutter/foundation.dart';
 
 import '../../../core/services/ollama_service.dart';
 import '../../../core/utils/git_checker.dart';
+import '../../repository/data/git_service.dart';
 import '../models/readiness_state.dart';
 
 /// Controller coordinating system readiness diagnostics and target repository selection.
 class ReadinessController extends ChangeNotifier {
   final OllamaService _ollamaService;
+  final GitService _gitService;
   final Future<GitCheckResult> Function() _gitChecker;
   SystemReadinessState _state;
 
   ReadinessController({
     OllamaService? ollamaService,
+    GitService? gitService,
     Future<GitCheckResult> Function()? gitChecker,
     bool autoCheck = true,
     SystemReadinessState? initialState,
   }) : _ollamaService = ollamaService ?? OllamaService(),
+       _gitService = gitService ?? GitService(),
        _gitChecker = gitChecker ?? GitChecker.checkGit,
        _state = initialState ?? SystemReadinessState.initial() {
     if (autoCheck) {
@@ -26,6 +30,7 @@ class ReadinessController extends ChangeNotifier {
 
   SystemReadinessState get state => _state;
   OllamaService get ollamaService => _ollamaService;
+  GitService get gitService => _gitService;
 
   /// Runs live diagnostics for Git toolchain and Ollama service reachability.
   Future<void> checkSystemReadiness() async {
@@ -62,7 +67,7 @@ class ReadinessController extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Triggers native Windows directory picker dialog.
+  /// Triggers native Windows directory picker dialog and validates repository root.
   Future<void> pickDirectory() async {
     try {
       final selectedPath = await FilePicker.getDirectoryPath(
@@ -70,20 +75,50 @@ class ReadinessController extends ChangeNotifier {
       );
 
       if (selectedPath != null && selectedPath.trim().isNotEmpty) {
-        _state = _state.copyWith(selectedDirectory: selectedPath.trim());
-        notifyListeners();
+        await _validateAndSetDirectory(selectedPath.trim());
       }
     } catch (e) {
       debugPrint('Error opening directory picker: $e');
     }
   }
 
-  /// Manually set or update repository directory path.
-  void setDirectory(String path) {
+  /// Manually set or update repository directory path with Git root validation.
+  Future<void> setDirectory(String path) async {
     if (path.trim().isEmpty) {
       _state = _state.copyWith(clearDirectory: true);
+      notifyListeners();
     } else {
-      _state = _state.copyWith(selectedDirectory: path.trim());
+      await _validateAndSetDirectory(path.trim());
+    }
+  }
+
+  Future<void> _validateAndSetDirectory(String path) async {
+    final rootResult = await _gitService.resolveRepositoryRoot(path);
+    switch (rootResult) {
+      case GitRootSuccess(:final canonicalRoot):
+        _state = _state.copyWith(
+          selectedDirectory: canonicalRoot,
+          isTargetGitRepo: true,
+          targetRepoError: null,
+        );
+      case GitRootNotARepository(:final message):
+        _state = _state.copyWith(
+          selectedDirectory: path,
+          isTargetGitRepo: false,
+          targetRepoError: message,
+        );
+      case GitRootNotInstalled(:final error):
+        _state = _state.copyWith(
+          selectedDirectory: path,
+          isTargetGitRepo: false,
+          targetRepoError: error,
+        );
+      case GitRootFailure(:final error):
+        _state = _state.copyWith(
+          selectedDirectory: path,
+          isTargetGitRepo: false,
+          targetRepoError: error,
+        );
     }
     notifyListeners();
   }

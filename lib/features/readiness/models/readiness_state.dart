@@ -7,6 +7,8 @@ class SystemReadinessState {
   final GitCheckResult gitResult;
   final OllamaHealthResult ollamaResult;
   final String? selectedDirectory;
+  final bool? isTargetGitRepo;
+  final String? targetRepoError;
   final DateTime? lastChecked;
 
   const SystemReadinessState({
@@ -14,6 +16,8 @@ class SystemReadinessState {
     required this.gitResult,
     required this.ollamaResult,
     this.selectedDirectory,
+    this.isTargetGitRepo,
+    this.targetRepoError,
     this.lastChecked,
   });
 
@@ -23,6 +27,8 @@ class SystemReadinessState {
       gitResult: GitCheckResult.notInstalled('Not checked yet'),
       ollamaResult: OllamaHealthResult(status: OllamaHealthStatus.checking),
       selectedDirectory: null,
+      isTargetGitRepo: null,
+      targetRepoError: null,
       lastChecked: null,
     );
   }
@@ -32,13 +38,17 @@ class SystemReadinessState {
   bool get isSystemReady => isGitReady && isOllamaReady;
   bool get hasDirectorySelected =>
       selectedDirectory != null && selectedDirectory!.trim().isNotEmpty;
-  bool get canProceedToScan => isSystemReady && hasDirectorySelected;
+  bool get isValidGitRepository => isTargetGitRepo == true;
+  bool get canProceedToScan =>
+      isSystemReady && hasDirectorySelected && isValidGitRepository;
 
   SystemReadinessState copyWith({
     bool? isChecking,
     GitCheckResult? gitResult,
     OllamaHealthResult? ollamaResult,
     String? selectedDirectory,
+    bool? isTargetGitRepo,
+    String? targetRepoError,
     bool clearDirectory = false,
     DateTime? lastChecked,
   }) {
@@ -49,6 +59,12 @@ class SystemReadinessState {
       selectedDirectory: clearDirectory
           ? null
           : (selectedDirectory ?? this.selectedDirectory),
+      isTargetGitRepo: clearDirectory
+          ? null
+          : (isTargetGitRepo ?? this.isTargetGitRepo),
+      targetRepoError: clearDirectory
+          ? null
+          : (targetRepoError ?? this.targetRepoError),
       lastChecked: lastChecked ?? this.lastChecked,
     );
   }

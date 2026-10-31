@@ -179,8 +179,8 @@ class ReadinessScreen extends StatelessWidget {
           SizedBox(width: 10),
           Expanded(
             child: Text(
-              'Active Milestone: M2 (Flutter Windows scaffold & readiness shell verified). '
-              'Next: M3 Safe Git Service & Bounded Scanner candidate enumeration.',
+              'Active Milestone: M3 (Safe Git service & bounded repository scanner verified). '
+              'Next: M4 Evidence snapshots & local Gemma autopsy integration.',
               style: TextStyle(fontSize: 12, color: AppColors.textMuted),
             ),
           ),
