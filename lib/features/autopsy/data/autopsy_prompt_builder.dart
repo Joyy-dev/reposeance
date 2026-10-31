@@ -190,6 +190,13 @@ Return only valid JSON matching the schema requested by the application.''';
     buffer.writeln(
       'Do NOT reference any other ID. Any unsupplied or ungrounded aspects must be listed under "unknowns".',
     );
+    buffer.writeln('Output guidelines:');
+    buffer.writeln(
+      '- Keep findings and explanations concise and factual (1-2 clear sentences each).',
+    );
+    buffer.writeln(
+      '- Ensure the entire JSON structure is complete and fully closed.',
+    );
     buffer.writeln();
     buffer.writeln('Return JSON using the required autopsy schema.');
 
@@ -221,6 +228,9 @@ Return only valid JSON matching the schema requested by the application.''';
     );
     buffer.writeln(
       '- Ensure string lengths and list item counts adhere strictly to the schema.',
+    );
+    buffer.writeln(
+      '- Keep descriptions concise (1-2 sentences each) so that the JSON output finishes completely.',
     );
     buffer.writeln(
       'Return only the repaired JSON object without markdown fences.',

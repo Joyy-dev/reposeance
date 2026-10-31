@@ -190,7 +190,7 @@ class OllamaService {
       'messages': messages,
       'stream': false,
       'think': false,
-      'options': {'temperature': 0.1, 'num_predict': 768, ...?options},
+      'options': {'temperature': 0.1, 'num_predict': 2048, ...?options},
     };
     if (format != null) {
       payload['format'] = format;

@@ -180,6 +180,7 @@ class AutopsyService {
     return await ollamaService.chat(
       messages: messages,
       format: AutopsyPromptBuilder.autopsySchema,
+      options: const {'temperature': 0.1, 'num_predict': 2048},
       timeout: timeout,
       clientOverride: client,
     );
