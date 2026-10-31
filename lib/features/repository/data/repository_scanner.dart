@@ -425,7 +425,9 @@ class RepositoryScanner {
 
   /// Sensitive file pattern detection.
   bool _isSensitiveFile(String filename) {
-    if (filename == '.env' || filename.startsWith('.env.')) {
+    if (filename == '.env' ||
+        filename.startsWith('.env.') ||
+        filename.endsWith('.env')) {
       return true;
     }
     if (filename.endsWith('.pem') ||

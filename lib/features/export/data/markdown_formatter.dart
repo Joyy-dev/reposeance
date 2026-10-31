@@ -375,7 +375,7 @@ class MarkdownFormatter {
 
     // Private key blocks
     final privateKeyRegex = RegExp(
-      r'-----BEGIN [A-Z ]+ PRIVATE KEY-----[\s\S]*?-----END [A-Z ]+ PRIVATE KEY-----',
+      r'-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----',
     );
     result = result.replaceAll(privateKeyRegex, '[REDACTED_PRIVATE_KEY]');
 

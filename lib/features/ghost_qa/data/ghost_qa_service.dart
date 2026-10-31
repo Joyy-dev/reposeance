@@ -179,6 +179,8 @@ class GhostQaService {
       throw GhostQaServiceException(
         'Ollama service connection failed: ${e.message}',
       );
+    } on OllamaServiceException catch (e) {
+      throw GhostQaServiceException(e.message);
     } finally {
       if (_activeRequestId == requestId) {
         _activeRequestId = null;

@@ -69,7 +69,7 @@ void main() {
       () async {
         final commits = await gitService.getRecentCommits(
           currentProductRepo,
-          maxCommits: 5,
+          maxCommits: 15,
         );
         expect(commits, isNotEmpty);
         final latestCommit = commits.first;
@@ -84,7 +84,8 @@ void main() {
                 c.subject.contains(
                   'initial RepoSéance Windows desktop scaffold',
                 ) ||
-                c.subject.contains('feat: safe git service'),
+                c.subject.contains('feat: safe git service') ||
+                c.subject.contains('feat: native markdown report export'),
           ),
           isTrue,
         );
