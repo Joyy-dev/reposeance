@@ -54,6 +54,11 @@ class WorkbenchState {
   final Duration ghostQaElapsedDuration;
   final String? ghostQaErrorMessage;
 
+  // Markdown Report Export state (M7)
+  final bool isExporting;
+  final String? lastExportedPath;
+  final String? exportErrorMessage;
+
   const WorkbenchState({
     this.selectedDirectory,
     this.repositoryInfo,
@@ -73,6 +78,9 @@ class WorkbenchState {
     this.ghostQaStageText = '',
     this.ghostQaElapsedDuration = Duration.zero,
     this.ghostQaErrorMessage,
+    this.isExporting = false,
+    this.lastExportedPath,
+    this.exportErrorMessage,
   });
 
   factory WorkbenchState.initial() =>
@@ -119,6 +127,11 @@ class WorkbenchState {
     Duration? ghostQaElapsedDuration,
     String? ghostQaErrorMessage,
     bool clearGhostQaErrorMessage = false,
+    bool? isExporting,
+    String? lastExportedPath,
+    bool clearLastExportedPath = false,
+    String? exportErrorMessage,
+    bool clearExportErrorMessage = false,
   }) {
     return WorkbenchState(
       selectedDirectory: clearDirectory
@@ -156,6 +169,13 @@ class WorkbenchState {
       ghostQaErrorMessage: clearGhostQaErrorMessage
           ? null
           : (ghostQaErrorMessage ?? this.ghostQaErrorMessage),
+      isExporting: isExporting ?? this.isExporting,
+      lastExportedPath: clearLastExportedPath
+          ? null
+          : (lastExportedPath ?? this.lastExportedPath),
+      exportErrorMessage: clearExportErrorMessage
+          ? null
+          : (exportErrorMessage ?? this.exportErrorMessage),
     );
   }
 }

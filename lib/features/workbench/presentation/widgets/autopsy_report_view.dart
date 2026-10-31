@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:reposeance/core/theme/app_colors.dart';
 import 'package:reposeance/features/autopsy/domain/models/autopsy_report.dart';
+import 'package:reposeance/features/export/presentation/widgets/export_report_dialog.dart';
 import 'package:reposeance/features/ghost_qa/presentation/widgets/ghost_qa_view.dart';
 import 'package:reposeance/features/workbench/controllers/workbench_controller.dart';
 import 'package:reposeance/features/workbench/domain/models/workbench_state.dart';
@@ -171,11 +172,12 @@ class AutopsyReportView extends StatelessWidget {
             ),
           ),
 
-          // Export Scope Preview Button
+          // Export Report Button
           OutlinedButton.icon(
-            onPressed: () => _showExportScopeDialog(context),
-            icon: const Icon(Icons.description_outlined, size: 16),
-            label: const Text('Export Scope'),
+            key: const Key('export-report-button'),
+            onPressed: () => _handleExport(context),
+            icon: const Icon(Icons.file_download_outlined, size: 16),
+            label: const Text('Export Report'),
             style: OutlinedButton.styleFrom(
               foregroundColor: AppColors.textPrimary,
               side: const BorderSide(color: AppColors.border),
@@ -291,54 +293,85 @@ class AutopsyReportView extends StatelessWidget {
     );
   }
 
-  void _showExportScopeDialog(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          backgroundColor: AppColors.surface,
-          title: const Text(
-            'Export Scope — Design Preview',
-            style: TextStyle(color: AppColors.textPrimary),
-          ),
-          content: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 480),
-            child: const Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Native Markdown report export arrives in Milestone 7.',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.accentAmber,
-                  ),
-                ),
-                SizedBox(height: 10),
-                Text(
-                  'Intended Markdown export includes:\n\n'
-                  '• Validated report findings and verified citation IDs\n'
-                  '• Snapshot ID, HEAD commit hash, and model identity\n'
-                  '• Partial-scan limits, candidate counts, and explicit unknowns\n'
-                  '• Strict redaction: No private local user paths or raw prompts\n',
-                  style: TextStyle(
-                    fontSize: 13,
-                    height: 1.5,
-                    color: AppColors.textSecondary,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Close'),
-            ),
-          ],
-        );
-      },
+  Future<void> _handleExport(BuildContext context) async {
+    final options = await ExportReportDialog.show(
+      context,
+      workbenchState: state,
     );
+    if (options == null || !context.mounted) {
+      return;
+    }
+
+    final result = await controller.exportMarkdownReport(
+      includeGhostQa: options.includeGhostQa,
+    );
+
+    if (!context.mounted) return;
+
+    if (result.isSuccess) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: AppColors.surfaceElevated,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+            side: const BorderSide(color: AppColors.borderLight),
+          ),
+          content: Row(
+            children: [
+              const Icon(
+                Icons.check_circle_outline_rounded,
+                color: AppColors.success,
+                size: 18,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Report exported to ${result.filePath}',
+                  style: const TextStyle(
+                    color: AppColors.textPrimary,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          duration: const Duration(seconds: 5),
+        ),
+      );
+    } else if (result.isFailed) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: AppColors.surfaceElevated,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+            side: const BorderSide(color: AppColors.error),
+          ),
+          content: Row(
+            children: [
+              const Icon(
+                Icons.error_outline_rounded,
+                color: AppColors.error,
+                size: 18,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  result.errorMessage ?? 'Export failed.',
+                  style: const TextStyle(
+                    color: AppColors.textPrimary,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          duration: const Duration(seconds: 5),
+        ),
+      );
+    }
   }
 }

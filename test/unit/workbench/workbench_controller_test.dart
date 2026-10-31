@@ -7,8 +7,12 @@ import 'package:reposeance/features/autopsy/domain/models/autopsy_report.dart';
 import 'package:reposeance/features/autopsy/domain/models/evidence_item.dart';
 import 'package:reposeance/features/autopsy/domain/models/evidence_snapshot.dart';
 import 'package:reposeance/features/autopsy/domain/models/revival_step.dart';
+import 'package:reposeance/features/export/domain/models/export_result.dart';
 import 'package:reposeance/features/ghost_qa/data/ghost_qa_service.dart';
 import 'package:reposeance/features/ghost_qa/domain/models/ghost_answer.dart';
+
+import '../export/mocks/memory_file_saver.dart';
+
 import 'package:reposeance/features/repository/data/git_service.dart';
 import 'package:reposeance/features/repository/data/repository_scanner.dart';
 import 'package:reposeance/features/repository/domain/models/git_commit.dart';
@@ -535,5 +539,116 @@ void main() {
         expect(controller.state.ghostQaStatus, equals(GhostQaStatus.idle));
       },
     );
+
+    // --- Markdown Report Export Operations (M7) Tests ---
+
+    test(
+      'exportMarkdownReport without active report returns failure',
+      () async {
+        final controller = WorkbenchController(
+          gitService: fakeGit,
+          scanner: fakeScanner,
+          autopsyService: fakeAutopsy,
+          autoCheckReadiness: false,
+        );
+
+        final result = await controller.exportMarkdownReport();
+
+        expect(result.status, equals(ExportStatus.failed));
+        expect(result.errorMessage, contains('No active autopsy report'));
+        expect(controller.state.isExporting, isFalse);
+      },
+    );
+
+    test(
+      'exportMarkdownReport successfully saves and updates lastExportedPath',
+      () async {
+        final memorySaver = MemoryFileSaver();
+        final controller = WorkbenchController(
+          gitService: fakeGit,
+          scanner: fakeScanner,
+          autopsyService: fakeAutopsy,
+          ghostQaService: fakeGhostQa,
+          autoCheckReadiness: false,
+        );
+
+        await controller.setDirectory(r'C:\mock\repo');
+        await controller.startInvestigation();
+
+        final result = await controller.exportMarkdownReport(
+          overrideSaver: memorySaver,
+          exportTimestamp: DateTime.utc(2026, 10, 31, 13, 0),
+        );
+
+        expect(result.status, equals(ExportStatus.success));
+        expect(controller.state.isExporting, isFalse);
+        expect(controller.state.lastExportedPath, isNotNull);
+        expect(
+          controller.state.lastExportedPath,
+          contains('repo_autopsy_20261031_snap_'),
+        );
+        expect(controller.state.exportErrorMessage, isNull);
+        expect(
+          memorySaver.lastSavedContent,
+          contains('# RepoSéance Forensic Autopsy Report: repo'),
+        );
+      },
+    );
+
+    test('exportMarkdownReport user cancellation leaves state intact without error', () async {
+      final memorySaver = MemoryFileSaver(shouldCancel: true);
+      final controller = WorkbenchController(
+        gitService: fakeGit,
+        scanner: fakeScanner,
+        autopsyService: fakeAutopsy,
+        ghostQaService: fakeGhostQa,
+        autoCheckReadiness: false,
+      );
+
+      await controller.setDirectory(r'C:\mock\repo');
+      await controller.startInvestigation();
+
+      final result = await controller.exportMarkdownReport(
+        overrideSaver: memorySaver,
+      );
+
+      expect(result.status, equals(ExportStatus.cancelled));
+      expect(controller.state.isExporting, isFalse);
+      expect(controller.state.lastExportedPath, isNull);
+      expect(controller.state.exportErrorMessage, isNull);
+      expect(controller.state.autopsyReport, isNotNull);
+    });
+
+    test('exportMarkdownReport recoverable failure sets exportErrorMessage without clearing report', () async {
+      final memorySaver = MemoryFileSaver(
+        failureError: 'Simulated disk write failure',
+      );
+      final controller = WorkbenchController(
+        gitService: fakeGit,
+        scanner: fakeScanner,
+        autopsyService: fakeAutopsy,
+        ghostQaService: fakeGhostQa,
+        autoCheckReadiness: false,
+      );
+
+      await controller.setDirectory(r'C:\mock\repo');
+      await controller.startInvestigation();
+
+      final result = await controller.exportMarkdownReport(
+        overrideSaver: memorySaver,
+      );
+
+      expect(result.status, equals(ExportStatus.failed));
+      expect(controller.state.isExporting, isFalse);
+      expect(
+        controller.state.exportErrorMessage,
+        contains('Simulated disk write failure'),
+      );
+      expect(controller.state.autopsyReport, isNotNull);
+
+      // Verify clearExportError
+      controller.clearExportError();
+      expect(controller.state.exportErrorMessage, isNull);
+    });
   });
 }

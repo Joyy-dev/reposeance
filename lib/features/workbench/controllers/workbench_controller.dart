@@ -6,6 +6,10 @@ import 'package:reposeance/core/services/ollama_service.dart';
 import 'package:reposeance/core/utils/git_checker.dart';
 import 'package:reposeance/features/autopsy/data/autopsy_service.dart';
 import 'package:reposeance/features/autopsy/domain/models/evidence_snapshot.dart';
+import 'package:reposeance/features/export/data/markdown_export_service.dart';
+import 'package:reposeance/features/export/domain/models/export_options.dart';
+import 'package:reposeance/features/export/domain/models/export_result.dart';
+import 'package:reposeance/features/export/domain/services/file_saver.dart';
 import 'package:reposeance/features/ghost_qa/data/ghost_qa_service.dart';
 import 'package:reposeance/features/ghost_qa/domain/models/ghost_question.dart';
 import 'package:reposeance/features/repository/data/git_service.dart';
@@ -20,6 +24,7 @@ class WorkbenchController extends ChangeNotifier {
   final OllamaService _ollamaService;
   final AutopsyService _autopsyService;
   final GhostQaService _ghostQaService;
+  final MarkdownExportService _exportService;
   final Future<GitCheckResult> Function() _gitChecker;
 
   WorkbenchState _state;
@@ -34,6 +39,7 @@ class WorkbenchController extends ChangeNotifier {
     OllamaService? ollamaService,
     AutopsyService? autopsyService,
     GhostQaService? ghostQaService,
+    MarkdownExportService? exportService,
     Future<GitCheckResult> Function()? gitChecker,
     WorkbenchState? initialState,
     bool autoCheckReadiness = true,
@@ -46,6 +52,7 @@ class WorkbenchController extends ChangeNotifier {
        _ghostQaService =
            ghostQaService ??
            GhostQaService(ollamaService: ollamaService ?? OllamaService()),
+       _exportService = exportService ?? MarkdownExportService(),
        _gitChecker = gitChecker ?? GitChecker.checkGit,
        _state = initialState ?? WorkbenchState.initial() {
     if (autoCheckReadiness) {
@@ -461,5 +468,70 @@ class WorkbenchController extends ChangeNotifier {
     _ghostQaService.cancelCurrentRequest();
     _state = WorkbenchState(readinessState: _state.readinessState);
     _safeNotifyListeners();
+  }
+
+  // --- Markdown Report Export Operations (M7) ---
+
+  /// Exports the active autopsy report and optional Ask the Ghost Q&A inquiries to Markdown.
+  Future<ExportResult> exportMarkdownReport({
+    bool includeGhostQa = true,
+    FileSaver? overrideSaver,
+    DateTime? exportTimestamp,
+  }) async {
+    final report = _state.autopsyReport;
+    final snapshot = _state.evidenceSnapshot;
+
+    if (report == null || snapshot == null) {
+      return ExportResult.failed(
+        'No active autopsy report available to export.',
+      );
+    }
+
+    _state = _state.copyWith(isExporting: true, clearExportErrorMessage: true);
+    _safeNotifyListeners();
+
+    try {
+      final result = await _exportService.exportReport(
+        report: report,
+        snapshot: snapshot,
+        repoInfo: _state.repositoryInfo,
+        scanResult: _state.scanResult,
+        ghostQuestion: _state.ghostQuestion,
+        ghostAnswer: _state.ghostAnswer,
+        options: ExportOptions(includeGhostQa: includeGhostQa),
+        fileSaver: overrideSaver,
+        exportTimestamp: exportTimestamp,
+      );
+
+      if (result.isSuccess) {
+        _state = _state.copyWith(
+          isExporting: false,
+          lastExportedPath: result.filePath,
+        );
+      } else if (result.isCancelled) {
+        _state = _state.copyWith(isExporting: false);
+      } else {
+        _state = _state.copyWith(
+          isExporting: false,
+          exportErrorMessage: result.errorMessage ?? 'Failed to export report.',
+        );
+      }
+
+      _safeNotifyListeners();
+      return result;
+    } catch (e) {
+      final message = 'Export error: $e';
+      _state = _state.copyWith(isExporting: false, exportErrorMessage: message);
+      _safeNotifyListeners();
+      return ExportResult.failed(message);
+    }
+  }
+
+  /// Clears the last export error message.
+  void clearExportError() {
+    if (_state.exportErrorMessage != null) {
+      _state = _state.copyWith(clearExportErrorMessage: true);
+      _safeNotifyListeners();
+    }
   }
 }
