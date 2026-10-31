@@ -7,6 +7,8 @@ import 'package:reposeance/features/autopsy/domain/models/autopsy_report.dart';
 import 'package:reposeance/features/autopsy/domain/models/evidence_item.dart';
 import 'package:reposeance/features/autopsy/domain/models/evidence_snapshot.dart';
 import 'package:reposeance/features/autopsy/domain/models/revival_step.dart';
+import 'package:reposeance/features/ghost_qa/data/ghost_qa_service.dart';
+import 'package:reposeance/features/ghost_qa/domain/models/ghost_answer.dart';
 import 'package:reposeance/features/repository/data/git_service.dart';
 import 'package:reposeance/features/repository/data/repository_scanner.dart';
 import 'package:reposeance/features/repository/domain/models/git_commit.dart';
@@ -161,11 +163,50 @@ class FakeAutopsyService extends AutopsyService {
   }
 }
 
+class FakeGhostQaService extends GhostQaService {
+  GhostAnswer? answerToReturn;
+  bool shouldThrow = false;
+  bool wasCancelled = false;
+
+  FakeGhostQaService({required super.ollamaService, this.answerToReturn});
+
+  @override
+  Future<GhostAnswer> askQuestion({
+    required EvidenceSnapshot snapshot,
+    required String question,
+    Duration timeout = const Duration(seconds: 150),
+    int topK = 4,
+    double minScore = 1.0,
+  }) async {
+    if (shouldThrow) {
+      throw Exception('Model inference timeout');
+    }
+    return answerToReturn ??
+        GhostAnswer(
+          notFound: false,
+          claims: const [
+            AutopsyFinding(
+              text: 'The app uses SQLite for persistence.',
+              kind: FindingKind.observed,
+              evidenceIds: ['E001'],
+            ),
+          ],
+          answeredAt: DateTime.now(),
+        );
+  }
+
+  @override
+  void cancelCurrentRequest() {
+    wasCancelled = true;
+  }
+}
+
 void main() {
   group('WorkbenchController Unit Tests', () {
     late FakeGitService fakeGit;
     late FakeRepositoryScanner fakeScanner;
     late FakeAutopsyService fakeAutopsy;
+    late FakeGhostQaService fakeGhostQa;
     late OllamaService realOllamaService;
 
     setUp(() {
@@ -173,6 +214,7 @@ void main() {
       fakeScanner = FakeRepositoryScanner();
       realOllamaService = OllamaService();
       fakeAutopsy = FakeAutopsyService(ollamaService: realOllamaService);
+      fakeGhostQa = FakeGhostQaService(ollamaService: realOllamaService);
     });
 
     test('initial state has idle status, zero elapsed duration, and initial readiness', () {
@@ -398,5 +440,100 @@ void main() {
       expect(controller.state.autopsyReport, isNull);
       expect(controller.state.activeEvidenceItem, isNull);
     });
+
+    test('askGhost sets searching status and completes with answer', () async {
+      final controller = WorkbenchController(
+        gitService: fakeGit,
+        scanner: fakeScanner,
+        autopsyService: fakeAutopsy,
+        ghostQaService: fakeGhostQa,
+        autoCheckReadiness: false,
+      );
+
+      await controller.setDirectory(r'C:\mock\repo');
+      await controller.startInvestigation();
+
+      await controller.askGhost('What database is used?');
+
+      expect(
+        controller.state.ghostQuestion?.text,
+        equals('What database is used?'),
+      );
+      expect(controller.state.ghostQaStatus, equals(GhostQaStatus.completed));
+      expect(controller.state.ghostAnswer, isNotNull);
+      expect(
+        controller.state.ghostAnswer!.claims.first.text,
+        contains('SQLite'),
+      );
+    });
+
+    test(
+      'askGhost without evidence snapshot reports descriptive error',
+      () async {
+        final controller = WorkbenchController(
+          gitService: fakeGit,
+          scanner: fakeScanner,
+          autopsyService: fakeAutopsy,
+          ghostQaService: fakeGhostQa,
+          autoCheckReadiness: false,
+        );
+
+        await controller.askGhost('What database is used?');
+
+        expect(controller.state.ghostQaStatus, equals(GhostQaStatus.failed));
+        expect(
+          controller.state.ghostQaErrorMessage,
+          contains('Investigate a repository first'),
+        );
+      },
+    );
+
+    test(
+      'cancelGhostQuestion cancels request and marks status cancelled',
+      () async {
+        final controller = WorkbenchController(
+          gitService: fakeGit,
+          scanner: fakeScanner,
+          autopsyService: fakeAutopsy,
+          ghostQaService: fakeGhostQa,
+          autoCheckReadiness: false,
+        );
+
+        await controller.setDirectory(r'C:\mock\repo');
+        await controller.startInvestigation();
+
+        // Trigger question then cancel
+        controller.cancelGhostQuestion();
+
+        expect(controller.state.ghostQaStatus, equals(GhostQaStatus.cancelled));
+        expect(fakeGhostQa.wasCancelled, isTrue);
+      },
+    );
+
+    test(
+      'switching repository resets Ghost Q&A state preventing repo mixing',
+      () async {
+        final controller = WorkbenchController(
+          gitService: fakeGit,
+          scanner: fakeScanner,
+          autopsyService: fakeAutopsy,
+          ghostQaService: fakeGhostQa,
+          autoCheckReadiness: false,
+        );
+
+        await controller.setDirectory(r'C:\mock\repo');
+        await controller.startInvestigation();
+        await controller.askGhost('What database is used?');
+
+        expect(controller.state.ghostAnswer, isNotNull);
+
+        // Switch to empty/new directory
+        await controller.setDirectory('');
+
+        expect(controller.state.ghostQuestion, isNull);
+        expect(controller.state.ghostAnswer, isNull);
+        expect(controller.state.ghostQaStatus, equals(GhostQaStatus.idle));
+      },
+    );
   });
 }

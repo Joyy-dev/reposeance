@@ -2,6 +2,8 @@ import 'package:flutter/foundation.dart';
 import 'package:reposeance/features/autopsy/domain/models/autopsy_report.dart';
 import 'package:reposeance/features/autopsy/domain/models/evidence_item.dart';
 import 'package:reposeance/features/autopsy/domain/models/evidence_snapshot.dart';
+import 'package:reposeance/features/ghost_qa/domain/models/ghost_answer.dart';
+import 'package:reposeance/features/ghost_qa/domain/models/ghost_question.dart';
 import 'package:reposeance/features/readiness/models/readiness_state.dart';
 import 'package:reposeance/features/repository/domain/models/repository_info.dart';
 import 'package:reposeance/features/repository/domain/models/scan_result.dart';
@@ -25,6 +27,9 @@ enum ScanStage {
   runningInference,
 }
 
+/// Status for interactive Ask the Ghost Q&A operations.
+enum GhostQaStatus { idle, searching, generating, completed, failed, cancelled }
+
 /// Immutable state representation for the RepoSéance single-workspace workbench.
 @immutable
 class WorkbenchState {
@@ -41,6 +46,14 @@ class WorkbenchState {
   final EvidenceItem? activeEvidenceItem;
   final SystemReadinessState readinessState;
 
+  // Ask the Ghost Q&A state (M6)
+  final GhostQuestion? ghostQuestion;
+  final GhostAnswer? ghostAnswer;
+  final GhostQaStatus ghostQaStatus;
+  final String ghostQaStageText;
+  final Duration ghostQaElapsedDuration;
+  final String? ghostQaErrorMessage;
+
   const WorkbenchState({
     this.selectedDirectory,
     this.repositoryInfo,
@@ -54,6 +67,12 @@ class WorkbenchState {
     this.errorMessage,
     this.activeEvidenceItem,
     required this.readinessState,
+    this.ghostQuestion,
+    this.ghostAnswer,
+    this.ghostQaStatus = GhostQaStatus.idle,
+    this.ghostQaStageText = '',
+    this.ghostQaElapsedDuration = Duration.zero,
+    this.ghostQaErrorMessage,
   });
 
   factory WorkbenchState.initial() =>
@@ -66,6 +85,10 @@ class WorkbenchState {
   bool get isPartialScan => scanResult?.isPartial ?? false;
 
   bool get isModelUnavailable => !readinessState.isOllamaReady;
+
+  bool get isGhostQaLoading =>
+      ghostQaStatus == GhostQaStatus.searching ||
+      ghostQaStatus == GhostQaStatus.generating;
 
   WorkbenchState copyWith({
     String? selectedDirectory,
@@ -87,6 +110,15 @@ class WorkbenchState {
     EvidenceItem? activeEvidenceItem,
     bool clearActiveEvidence = false,
     SystemReadinessState? readinessState,
+    GhostQuestion? ghostQuestion,
+    bool clearGhostQuestion = false,
+    GhostAnswer? ghostAnswer,
+    bool clearGhostAnswer = false,
+    GhostQaStatus? ghostQaStatus,
+    String? ghostQaStageText,
+    Duration? ghostQaElapsedDuration,
+    String? ghostQaErrorMessage,
+    bool clearGhostQaErrorMessage = false,
   }) {
     return WorkbenchState(
       selectedDirectory: clearDirectory
@@ -113,6 +145,17 @@ class WorkbenchState {
           ? null
           : (activeEvidenceItem ?? this.activeEvidenceItem),
       readinessState: readinessState ?? this.readinessState,
+      ghostQuestion: clearGhostQuestion
+          ? null
+          : (ghostQuestion ?? this.ghostQuestion),
+      ghostAnswer: clearGhostAnswer ? null : (ghostAnswer ?? this.ghostAnswer),
+      ghostQaStatus: ghostQaStatus ?? this.ghostQaStatus,
+      ghostQaStageText: ghostQaStageText ?? this.ghostQaStageText,
+      ghostQaElapsedDuration:
+          ghostQaElapsedDuration ?? this.ghostQaElapsedDuration,
+      ghostQaErrorMessage: clearGhostQaErrorMessage
+          ? null
+          : (ghostQaErrorMessage ?? this.ghostQaErrorMessage),
     );
   }
 }

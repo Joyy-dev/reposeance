@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:reposeance/core/theme/app_colors.dart';
 import 'package:reposeance/features/autopsy/domain/models/autopsy_report.dart';
+import 'package:reposeance/features/ghost_qa/presentation/widgets/ghost_qa_view.dart';
 import 'package:reposeance/features/workbench/controllers/workbench_controller.dart';
 import 'package:reposeance/features/workbench/domain/models/workbench_state.dart';
 
@@ -80,8 +81,8 @@ class AutopsyReportView extends StatelessWidget {
 
               const SizedBox(height: 32),
 
-              // 4. Ask the Ghost Disabled Preview (Scheduled for M6)
-              _buildGhostPreviewCard(),
+              // 4. Ask the Ghost Interactive Q&A Assistant (M6)
+              const GhostQaView(),
             ],
           ),
         ),
@@ -287,104 +288,6 @@ class AutopsyReportView extends StatelessWidget {
           ),
         ),
       ],
-    );
-  }
-
-  Widget _buildGhostPreviewCard() {
-    return Container(
-      padding: const EdgeInsets.all(22),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppColors.border, width: 1),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: AppColors.accentCyan.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(4),
-                  border: Border.all(
-                    color: AppColors.accentCyan.withValues(alpha: 0.3),
-                    width: 1,
-                  ),
-                ),
-                child: const Text(
-                  'FEATURE PREVIEW · SCHEDULED FOR M6',
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0.8,
-                    color: AppColors.accentCyan,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          const Text(
-            'Ask the Ghost (Interactive Q&A)',
-            style: TextStyle(
-              fontSize: 17,
-              fontWeight: FontWeight.w600,
-              color: AppColors.textPrimary,
-            ),
-          ),
-          const SizedBox(height: 4),
-          const Text(
-            'Grounded lexical Q&A against the immutable snapshot with honest "insufficient evidence" handling arrives in Milestone 6.',
-            style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
-          ),
-          const SizedBox(height: 14),
-
-          // Disabled Input Preview
-          Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  enabled: false,
-                  decoration: InputDecoration(
-                    hintText: 'Why did the maintainer abandon this repository?',
-                    hintStyle: const TextStyle(
-                      fontSize: 13,
-                      color: AppColors.textMuted,
-                    ),
-                    filled: true,
-                    fillColor: AppColors.background,
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 12,
-                    ),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(6),
-                      borderSide: const BorderSide(color: AppColors.border),
-                    ),
-                    disabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(6),
-                      borderSide: const BorderSide(color: AppColors.border),
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              ElevatedButton(
-                onPressed: null,
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 18,
-                    vertical: 14,
-                  ),
-                ),
-                child: const Text('Ask Question'),
-              ),
-            ],
-          ),
-        ],
-      ),
     );
   }
 

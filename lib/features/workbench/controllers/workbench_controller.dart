@@ -6,21 +6,25 @@ import 'package:reposeance/core/services/ollama_service.dart';
 import 'package:reposeance/core/utils/git_checker.dart';
 import 'package:reposeance/features/autopsy/data/autopsy_service.dart';
 import 'package:reposeance/features/autopsy/domain/models/evidence_snapshot.dart';
+import 'package:reposeance/features/ghost_qa/data/ghost_qa_service.dart';
+import 'package:reposeance/features/ghost_qa/domain/models/ghost_question.dart';
 import 'package:reposeance/features/repository/data/git_service.dart';
 import 'package:reposeance/features/repository/data/repository_scanner.dart';
 import 'package:reposeance/features/workbench/domain/models/workbench_state.dart';
 
 /// Main controller coordinating repository selection, bounded scanning,
-/// local autopsy generation, stage progression, and evidence drawer state.
+/// local autopsy generation, stage progression, evidence drawer, and Ask the Ghost Q&A.
 class WorkbenchController extends ChangeNotifier {
   final GitService _gitService;
   final RepositoryScanner _scanner;
   final OllamaService _ollamaService;
   final AutopsyService _autopsyService;
+  final GhostQaService _ghostQaService;
   final Future<GitCheckResult> Function() _gitChecker;
 
   WorkbenchState _state;
   Timer? _elapsedTimer;
+  Timer? _ghostQaElapsedTimer;
   bool _isDisposed = false;
   bool _isCancelled = false;
 
@@ -29,6 +33,7 @@ class WorkbenchController extends ChangeNotifier {
     RepositoryScanner? scanner,
     OllamaService? ollamaService,
     AutopsyService? autopsyService,
+    GhostQaService? ghostQaService,
     Future<GitCheckResult> Function()? gitChecker,
     WorkbenchState? initialState,
     bool autoCheckReadiness = true,
@@ -38,6 +43,9 @@ class WorkbenchController extends ChangeNotifier {
        _autopsyService =
            autopsyService ??
            AutopsyService(ollamaService: ollamaService ?? OllamaService()),
+       _ghostQaService =
+           ghostQaService ??
+           GhostQaService(ollamaService: ollamaService ?? OllamaService()),
        _gitChecker = gitChecker ?? GitChecker.checkGit,
        _state = initialState ?? WorkbenchState.initial() {
     if (autoCheckReadiness) {
@@ -50,12 +58,15 @@ class WorkbenchController extends ChangeNotifier {
   RepositoryScanner get scanner => _scanner;
   OllamaService get ollamaService => _ollamaService;
   AutopsyService get autopsyService => _autopsyService;
+  GhostQaService get ghostQaService => _ghostQaService;
 
   @override
   void dispose() {
     _isDisposed = true;
     _elapsedTimer?.cancel();
+    _ghostQaElapsedTimer?.cancel();
     _autopsyService.cancelCurrentRequest();
+    _ghostQaService.cancelCurrentRequest();
     super.dispose();
   }
 
@@ -122,6 +133,10 @@ class WorkbenchController extends ChangeNotifier {
 
   /// Validates and sets target repository path.
   Future<void> setDirectory(String path) async {
+    // Prevent cross-repository pollution: clear all prior Q&A and reports
+    _ghostQaElapsedTimer?.cancel();
+    _ghostQaService.cancelCurrentRequest();
+
     if (path.trim().isEmpty) {
       _state = _state.copyWith(
         clearDirectory: true,
@@ -131,6 +146,11 @@ class WorkbenchController extends ChangeNotifier {
         clearAutopsyReport: true,
         clearActiveEvidence: true,
         clearErrorMessage: true,
+        clearGhostQuestion: true,
+        clearGhostAnswer: true,
+        ghostQaStatus: GhostQaStatus.idle,
+        ghostQaStageText: '',
+        clearGhostQaErrorMessage: true,
         status: InvestigationStatus.idle,
         stage: ScanStage.idle,
         stageMessage: '',
@@ -152,6 +172,11 @@ class WorkbenchController extends ChangeNotifier {
           clearAutopsyReport: true,
           clearActiveEvidence: true,
           clearErrorMessage: true,
+          clearGhostQuestion: true,
+          clearGhostAnswer: true,
+          ghostQaStatus: GhostQaStatus.idle,
+          ghostQaStageText: '',
+          clearGhostQaErrorMessage: true,
           status: InvestigationStatus.idle,
           stage: ScanStage.idle,
           stageMessage: '',
@@ -162,6 +187,9 @@ class WorkbenchController extends ChangeNotifier {
         _state = _state.copyWith(
           selectedDirectory: path,
           clearRepositoryInfo: true,
+          clearGhostQuestion: true,
+          clearGhostAnswer: true,
+          ghostQaStatus: GhostQaStatus.idle,
           errorMessage: 'Directory is not a Git repository: $message',
           status: InvestigationStatus.failed,
         );
@@ -215,7 +243,7 @@ class WorkbenchController extends ChangeNotifier {
     );
     _safeNotifyListeners();
 
-    // Start live elapsed timer (ticks every second; truthful elapsed counter, no fake percent)
+    // Start live elapsed timer
     _elapsedTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (!_isDisposed && !_isCancelled) {
         _state = _state.copyWith(
@@ -305,6 +333,109 @@ class WorkbenchController extends ChangeNotifier {
     _safeNotifyListeners();
   }
 
+  // --- Ask the Ghost Q&A Operations (M6) ---
+
+  /// Asks a question to the Ghost Q&A assistant against the active snapshot.
+  Future<void> askGhost(String questionText) async {
+    final trimmed = questionText.trim();
+    if (trimmed.isEmpty) return;
+
+    final snapshot = _state.evidenceSnapshot;
+    if (snapshot == null) {
+      _state = _state.copyWith(
+        ghostQaStatus: GhostQaStatus.failed,
+        ghostQaErrorMessage: 'Investigate a repository first to summon evidence before asking questions.',
+      );
+      _safeNotifyListeners();
+      return;
+    }
+
+    _ghostQaElapsedTimer?.cancel();
+
+    _state = _state.copyWith(
+      ghostQuestion: GhostQuestion(text: trimmed),
+      ghostQaStatus: GhostQaStatus.searching,
+      ghostQaStageText: 'Searching snapshot & consulting local Gemma (CPU)...',
+      ghostQaElapsedDuration: Duration.zero,
+      clearGhostQaErrorMessage: true,
+    );
+    _safeNotifyListeners();
+
+    // Start live elapsed timer for Q&A
+    _ghostQaElapsedTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!_isDisposed && _state.isGhostQaLoading) {
+        _state = _state.copyWith(
+          ghostQaElapsedDuration:
+              _state.ghostQaElapsedDuration + const Duration(seconds: 1),
+        );
+        _safeNotifyListeners();
+      }
+    });
+
+    try {
+      final answer = await _ghostQaService.askQuestion(
+        snapshot: snapshot,
+        question: trimmed,
+      );
+
+      _ghostQaElapsedTimer?.cancel();
+      _state = _state.copyWith(
+        ghostAnswer: answer,
+        ghostQaStatus: GhostQaStatus.completed,
+        ghostQaStageText: answer.notFound
+            ? 'Answer complete (insufficient evidence).'
+            : 'Answer grounded and verified.',
+      );
+      _safeNotifyListeners();
+    } catch (e) {
+      _ghostQaElapsedTimer?.cancel();
+
+      // Preserve previous valid answer if one existed
+      final fallbackAnswer =
+          _state.ghostAnswer ?? _ghostQaService.lastValidAnswer;
+
+      _state = _state.copyWith(
+        ghostQaStatus: GhostQaStatus.failed,
+        ghostQaErrorMessage: 'Q&A inquiry failed: $e',
+        ghostAnswer: fallbackAnswer,
+      );
+      _safeNotifyListeners();
+    }
+  }
+
+  /// Cancels in-flight Ghost Q&A request and restores previous state.
+  void cancelGhostQuestion() {
+    _ghostQaElapsedTimer?.cancel();
+    _ghostQaService.cancelCurrentRequest();
+
+    final preservedAnswer =
+        _state.ghostAnswer ?? _ghostQaService.lastValidAnswer;
+
+    _state = _state.copyWith(
+      ghostQaStatus: GhostQaStatus.cancelled,
+      ghostQaStageText: 'Inquiry cancelled by user.',
+      ghostAnswer: preservedAnswer,
+    );
+    _safeNotifyListeners();
+  }
+
+  /// Clears the active Ghost Q&A question and answer.
+  void clearGhostAnswer() {
+    _ghostQaElapsedTimer?.cancel();
+    _ghostQaService.cancelCurrentRequest();
+    _state = _state.copyWith(
+      clearGhostQuestion: true,
+      clearGhostAnswer: true,
+      ghostQaStatus: GhostQaStatus.idle,
+      ghostQaStageText: '',
+      ghostQaElapsedDuration: Duration.zero,
+      clearGhostQaErrorMessage: true,
+    );
+    _safeNotifyListeners();
+  }
+
+  // --- Lateral Evidence Drawer Operations ---
+
   /// Opens the lateral evidence drawer with the referenced evidence item.
   void openEvidence(String evidenceId) {
     final item = _state.evidenceSnapshot?.evidenceMap[evidenceId];
@@ -325,7 +456,9 @@ class WorkbenchController extends ChangeNotifier {
   /// Clears current investigation and returns to initial state.
   void clearInvestigation() {
     _elapsedTimer?.cancel();
+    _ghostQaElapsedTimer?.cancel();
     _autopsyService.cancelCurrentRequest();
+    _ghostQaService.cancelCurrentRequest();
     _state = WorkbenchState(readinessState: _state.readinessState);
     _safeNotifyListeners();
   }
